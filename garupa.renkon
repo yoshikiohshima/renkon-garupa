@@ -1,0 +1,343 @@
+{"padTitle":"garupa",
+"positions":{"map":{"__map":true,
+"values":[["1",{"height":633.8273424613325,
+"id":"1",
+"type":"resize",
+"width":664.8266484331422,
+"x":-496.99086547777773,
+"y":-456.1694134904899}],["2",{"height":1732.6734058267516,
+"id":"2",
+"type":"resize",
+"width":1009.7195575009789,
+"x":869.2037957827308,
+"y":-131.68031188263484}],["3",{"height":120,
+"id":"3",
+"type":"move",
+"width":320.5,
+"x":291.4247156792924,
+"y":-247.2165132239449}],["4",{"height":120,
+"id":"4",
+"type":"resize",
+"width":599.7045510768463,
+"x":294.86631497034557,
+"y":-390.6258316871072}],["6",{"height":1715.0002487329705,
+"id":"6",
+"type":"resize",
+"width":885.6029033910421,
+"x":-1089.715906623933,
+"y":228.15210138442123}],["19",{"height":1260.4727666550432,
+"id":"19",
+"type":"resize",
+"width":856.9709965307303,
+"x":-158.41091535347385,
+"y":250.99662722571028}]]}},
+"titles":{"map":{"__map":true,
+"values":[["1",{"id":"1",
+"state":false,
+"title":"DOM"}],["2",{"id":"2",
+"state":false,
+"title":"untitled"}],["3",{"id":"3",
+"state":false,
+"title":"timer"}],["4",{"id":"4",
+"state":false,
+"title":"debug"}],["6",{"id":"6",
+"state":false,
+"title":"CSS"}],["19",{"id":"19",
+"state":false,
+"title":"Events"}]]}},
+"version":2,
+"windowEnabled":{"map":{"__map":true,
+"values":[["1",{"enabled":true,
+"id":"1"}],["2",{"enabled":true,
+"id":"2"}],["3",{"enabled":true,
+"id":"3"}],["4",{"enabled":false,
+"id":"4"}],["6",{"enabled":true,
+"id":"6"}],["19",{"enabled":true,
+"id":"19"}]]}},
+"windowTypes":{"map":{"__map":true,
+"values":[["1","code"],["2","code"],["3","code"],["4","code"],["6","code"],["19","code"]]}},
+"windows":["1","2","3","4","6","19"],
+"zIndex":{"map":{"__map":true,
+"values":[["1",100],["2",103],["3",108],["4",101],["6",106],["19",105]]}}}
+{__codeMap: true, value: [[`1`, `const renkon = (() => {
+    const renkon = document.createElement("div");
+    renkon.id = "renkon";
+    renkon.innerHTML = \`
+<div id="scale">
+  <div id="pad">
+    <div id="lanes">
+      <div id="lane1" class="lane"></div>
+      <div id="lane2" class="lane"></div>
+      <div id="lane3" class="lane"></div>
+      <div id="lane4" class="lane"></div>
+      <div id="lane5" class="lane"></div>
+      <div id="lane6" class="lane"></div>
+      <div id="lane7" class="lane"></div>
+    </div>
+    <div id="line"></div>
+  </div>
+
+</div>
+<div id="buttonBox">
+  <button id="start">Start</button>
+  <button id="time">Time</button>
+</div>
+<div id="judge"></div>
+\`.trim();
+
+    document.body.querySelector("#renkon")?.remove();
+    document.body.appendChild(renkon);
+    return renkon;
+})();
+
+const startClick = Events.listener(renkon.querySelector("#start"), "click", (evt) => evt);
+`],
+[`2`, `const sequence = [
+  {time: 0, pattern: [0, 1, 3, 5]},
+  {time: 100, pattern: [1, 2, 4, 6]},
+];
+
+class Sequencer {
+  get(i) {
+    const time = i * 300;
+    switch (i % 3) {
+      case 0:
+        return {time, pattern: [1]}
+      case 1:
+        return {time, pattern: [3]}
+      case 2:
+        return {time, pattern: [5]}
+    }
+  }
+}
+
+const sequencer = new Sequencer();
+
+const start = Behaviors.collect(undefined, startClick, (_old, click) => Renkon.time);
+const noteDuration = 1000;
+
+const trigger = {start, timer};
+
+const notes = Behaviors.select({state: {}, index: -1, array: []}, 
+  start, (_old, _new) => ({state: {}, index: -1, array: []}),
+  trigger, (old, trigger) => {                   
+    const {start, timer} = trigger;
+    const elapsed = timer - start;
+    const atLine = elapsed - noteDuration;
+    const oldArray = old.array;
+    const last = oldArray.length > 0 ? oldArray[oldArray.length - 1].time : -1;
+    let newArray = old.array.filter((note) => note.time >= atLine);
+    let maybeIndex = old.index;
+    while (sequencer.get(maybeIndex + 1) && sequencer.get(maybeIndex + 1).time <= elapsed) {
+      maybeIndex++;
+      newArray.push({time: sequencer.get(maybeIndex).time, index: maybeIndex, pattern: sequencer.get(maybeIndex).pattern});
+    }
+    return {state: trigger, index: maybeIndex, array: newArray};
+});
+
+const doms = Behaviors.collect(new Map(), notes, (now, notes) => {
+  const {start, timer} = notes.state;
+  const elapsed = timer - start;
+  const atLine = elapsed - noteDuration;
+
+  for (const [id, dom] of now) {
+    if (!(parseFloat(dom.time) >= atLine)) {
+      dom.remove();
+      now.delete(id);
+    }
+  }
+  const pad = document.body.querySelector("#pad");
+  for (const entry of notes.array) {
+    for (const pos of entry.pattern) {
+      if (!now.get(\`\${entry.time}-\${pos}\`)) {
+        const dom = document.createElement("div");
+        dom.time = \`\${entry.time}\`;
+        dom.id = \`\${entry.time}-\${pos}\`;
+        dom.pos = pos;
+        dom.classList.add("note");
+        now.set(dom.id, dom);
+        pad.appendChild(dom);
+      }
+    }
+  }
+  for (const [id, dom] of now) {
+    const pos = parseFloat(dom.pos);
+    const time = parseFloat(dom.time);
+    const lane = 64;
+    const half = lane / 2;
+    dom.style.transform = \`translate(\${pos * lane}px, \${atLine + 1000 - 32 - time}px)\`;
+  }
+  return now;
+});
+
+const resizer =  (evt) => {
+    const scaler = document.body.querySelector("#scale");
+    const pad = document.body.querySelector("#pad");
+    const scaleX = window.innerWidth / 500;
+    const scaleY = window.innerHeight / 2000;
+    const scale = Math.min(scaleY, scaleY);
+    scaler.style.transform = \`scale(\${scale})\`;
+};
+
+Events.listener(window, "resize", resizer);
+
+(() => {
+  resizer();
+})(renkon)
+`],
+[`3`, `const timer = Events.timer(4);
+`],
+[`4`, `const time = Events.listener(renkon.querySelector("#time"), "click", (evt) => evt);
+const timer = Events.collect(start, time, (old, _t) => old + 50);
+`],
+[`6`, `const css = \`
+html, body, #renkon, #pad {
+   height: 100%;
+}
+#buttonBox {
+  position: absolute;
+  top: 50px;
+  left: 50px;
+}
+.note {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  width: 64px;
+  height: 64px;
+  transform-origin: center;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22blueGradient%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23a8d0ff%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%233a75c4%22%2F%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3C!--%20Outer%20ring%20--%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22%231f2b3f%22%20%2F%3E%3C!--%20Middle%20gradient%20ring%20--%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2226%22%20fill%3D%22url(%23blueGradient)%22%20%2F%3E%3C!--%20Inner%20solid%20circle%20--%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2220%22%20fill%3D%22%23a8d0ff%22%20%2F%3E%3C%2Fsvg%3E");
+  background-position: left center;
+    pointer-events: none;
+}
+#scale {
+   width: 100%;
+   height: 100%;
+   transform-origin: center top;
+}
+#pad {
+  width: 448px;
+  height: 1000px;
+  margin-left: auto;
+  margin-right: auto;
+  background-color: #def;
+  perspective-origin: center center;
+  transform: perspective(550px) rotateX(60deg) translate(0px, 0px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#lanes {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.lane {
+  width: 64px;
+  height: 100%;
+  color: transparent;
+  border: 1px solid black;
+  background: linear-gradient(red, blue)
+}
+
+#judge {
+  position: absolute;
+  top: 50px;
+  right: 50px;
+  font-size: 18px;
+  background-color: #aac;
+  border-radius: 5px;
+  border: 1px solid purple;
+  width: 100px;
+  height: 24px;
+}
+
+#line {
+  position: relative;
+  top: -50px;
+  width: 500px;
+  left: -26px;
+  height: 4px;
+  background-color: gray;
+  pointer-events: none;
+}
+\`
+
+const addCss = ((renkon, css) => {
+  const style = document.createElement("style");
+  style.textContent = css;
+  style.id = "renkon-style";
+
+  renkon.querySelector("#renkon-style")?.remove();
+  renkon.appendChild(style);
+})(renkon, css);`],
+[`19`, `// const e1 = Behaviors.keep(Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt));
+const e1 = Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt);
+
+const e2 = Events.listener(renkon.querySelector("#lane2"), "pointerdown", (evt) => evt);
+const e3 = Events.listener(renkon.querySelector("#lane3"), "pointerdown", (evt) => evt);
+const e4 = Events.listener(renkon.querySelector("#lane4"), "pointerdown", (evt) => evt);
+const e5 = Events.listener(renkon.querySelector("#lane5"), "pointerdown", (evt) => evt);
+const e6 = Events.listener(renkon.querySelector("#lane6"), "pointerdown", (evt) => evt);
+const e7 = Events.listener(renkon.querySelector("#lane7"), "pointerdown", (evt) => evt);
+
+const taps = Events.some(e1, e2, e3, e4, e5, e6, e7, Behaviors.keep(0));
+const judge = ((notes, taps, _timer) => {
+  const {start, timer} = notes.state;
+  const elapsed = timer - start;
+  const atLine = elapsed - noteDuration + 50;
+  let test = [];
+  const checked = [];
+  for (let i = 0; i < 7; i++) {
+    const tap = taps[i];
+    // if (tap && i === 0) {debugger;}
+    if (tap !== undefined && !checked[i]) {
+      for (let j = 0; j < notes.array.length; j++) {
+        const pattern = notes.array[j].pattern;
+        const time = notes.array[j].time;
+        const onLane = pattern.includes(i);
+        if (onLane) {
+          checked[i] = true;
+          const diff = time - atLine;
+          if (diff < 300) {
+            test.push({lane: i, diff});
+          }
+        }
+      }
+    }
+  }
+  return test;
+})(notes, taps, timer);
+
+const result = Behaviors.select(
+  {map: new Map()},
+  start, (_old, _now) => ({map: new Map([["-20+", 0], ["-20", 0], ["+20", 0], ["+20+", 0]])}),
+  judge, (old, judge) => {
+    const incr = (diff) => {
+      let label;
+      if (diff < -20) {label = "-20+";}
+      else if (diff <= 0) {label = "-20";}
+      else if (diff <= 20) {label = "+20";}
+      else if (diff > 20) {label = "+20+";}
+
+      const m = old.map;
+      
+      m.set(label, m.get(label) + 1);
+    }
+    for (const t of judge) {
+      const {lane, diff} = t;
+      console.log(diff);
+      incr(diff);
+    }
+    return {map: old.map};
+  }
+);
+
+((result) => {
+  const m = result.map;
+  const str = \`\${[...m.values()]}\`;
+  document.querySelector("#judge").textContent = str;
+})(result);
+`]]}
