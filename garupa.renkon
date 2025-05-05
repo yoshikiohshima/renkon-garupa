@@ -1,36 +1,36 @@
 {"padTitle":"garupa",
 "positions":{"map":{"__map":true,
-"values":[["1",{"height":633.8273424613325,
+"values":[["1",{"height":653.2879719430376,
 "id":"1",
 "type":"resize",
-"width":664.8266484331422,
-"x":-496.99086547777773,
-"y":-456.1694134904899}],["2",{"height":1732.6734058267516,
+"width":657.2138851475773,
+"x":-544.0791461613585,
+"y":-750.1632464103108}],["2",{"height":1732.6734058267516,
 "id":"2",
-"type":"resize",
+"type":"move",
 "width":1009.7195575009789,
-"x":869.2037957827308,
-"y":-131.68031188263484}],["3",{"height":120,
+"x":879.4606552368214,
+"y":-36.68908131267392}],["3",{"height":127.50435073802478,
 "id":"3",
 "type":"move",
-"width":320.5,
-"x":291.4247156792924,
-"y":-247.2165132239449}],["4",{"height":120,
+"width":629.3443454976517,
+"x":219.82948847288066,
+"y":-239.02581415395753}],["4",{"height":120,
 "id":"4",
-"type":"resize",
-"width":599.7045510768463,
-"x":294.86631497034557,
-"y":-390.6258316871072}],["6",{"height":1715.0002487329705,
+"type":"move",
+"width":744.9912621421097,
+"x":216.92428778591525,
+"y":-410.40500909349475}],["6",{"height":1923.8298213869753,
 "id":"6",
 "type":"resize",
-"width":885.6029033910421,
+"width":962.8746253533244,
 "x":-1089.715906623933,
-"y":228.15210138442123}],["19",{"height":1260.4727666550432,
+"y":228.15210138442123}],["19",{"height":1289.4970619449764,
 "id":"19",
-"type":"resize",
-"width":856.9709965307303,
+"type":"move",
+"width":865.0461970820924,
 "x":-158.41091535347385,
-"y":250.99662722571028}]]}},
+"y":222.58375312266287}]]}},
 "titles":{"map":{"__map":true,
 "values":[["1",{"id":"1",
 "state":false,
@@ -58,7 +58,7 @@
 "values":[["1","code"],["2","code"],["3","code"],["4","code"],["6","code"],["19","code"]]}},
 "windows":["1","2","3","4","6","19"],
 "zIndex":{"map":{"__map":true,
-"values":[["1",100],["2",103],["3",108],["4",101],["6",106],["19",105]]}}}
+"values":[["1",108],["2",105],["3",101],["4",103],["6",106],["19",109]]}}}
 {__codeMap: true, value: [[`1`, `const renkon = (() => {
     const renkon = document.createElement("div");
     renkon.id = "renkon";
@@ -83,6 +83,7 @@
   <button id="time">Time</button>
 </div>
 <div id="judge"></div>
+<div id="lastJudge"></div>
 \`.trim();
 
     document.body.querySelector("#renkon")?.remove();
@@ -102,7 +103,7 @@ class Sequencer {
     const time = i * 300;
     switch (i % 3) {
       case 0:
-        return {time, pattern: [1]}
+        return {time, pattern: [0]}
       case 1:
         return {time, pattern: [3]}
       case 2:
@@ -186,10 +187,10 @@ Events.listener(window, "resize", resizer);
 })(renkon)
 `],
 [`3`, `const timer = Events.timer(4);
-`],
+const e1 = Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt);`],
 [`4`, `const time = Events.listener(renkon.querySelector("#time"), "click", (evt) => evt);
 const timer = Events.collect(start, time, (old, _t) => old + 50);
-`],
+const e1 = Behaviors.keep(Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt));`],
 [`6`, `const css = \`
 html, body, #renkon, #pad {
    height: 100%;
@@ -208,7 +209,7 @@ html, body, #renkon, #pad {
   transform-origin: center;
   background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3CradialGradient%20id%3D%22blueGradient%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23a8d0ff%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%233a75c4%22%2F%3E%3C%2FradialGradient%3E%3C%2Fdefs%3E%3C!--%20Outer%20ring%20--%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22%231f2b3f%22%20%2F%3E%3C!--%20Middle%20gradient%20ring%20--%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2226%22%20fill%3D%22url(%23blueGradient)%22%20%2F%3E%3C!--%20Inner%20solid%20circle%20--%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2220%22%20fill%3D%22%23a8d0ff%22%20%2F%3E%3C%2Fsvg%3E");
   background-position: left center;
-    pointer-events: none;
+  pointer-events: none;
 }
 #scale {
    width: 100%;
@@ -222,7 +223,7 @@ html, body, #renkon, #pad {
   margin-right: auto;
   background-color: #def;
   perspective-origin: center center;
-  transform: perspective(550px) rotateX(60deg) translate(0px, 0px);
+  transform: perspective(550px) rotateX(70deg) translate(0px, 0px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -242,6 +243,16 @@ html, body, #renkon, #pad {
   background: linear-gradient(red, blue)
 }
 
+#line {
+  position: relative;
+  top: -50px;
+  width: 500px;
+  left: -26px;
+  height: 4px;
+  background-color: gray;
+  pointer-events: none;
+}
+
 #judge {
   position: absolute;
   top: 50px;
@@ -254,15 +265,18 @@ html, body, #renkon, #pad {
   height: 24px;
 }
 
-#line {
-  position: relative;
-  top: -50px;
-  width: 500px;
-  left: -26px;
-  height: 4px;
-  background-color: gray;
-  pointer-events: none;
+#lastJudge {
+  position: absolute;
+  top: 40%;
+  right: 50px;
+  font-size: 18px;
+  background-color: #aac;
+  border-radius: 5px;
+  border: 1px solid purple;
+  width: 100px;
+  height: 24px;
 }
+
 \`
 
 const addCss = ((renkon, css) => {
@@ -274,8 +288,7 @@ const addCss = ((renkon, css) => {
   renkon.appendChild(style);
 })(renkon, css);`],
 [`19`, `// const e1 = Behaviors.keep(Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt));
-const e1 = Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt);
-
+// const e1 = Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt);
 const e2 = Events.listener(renkon.querySelector("#lane2"), "pointerdown", (evt) => evt);
 const e3 = Events.listener(renkon.querySelector("#lane3"), "pointerdown", (evt) => evt);
 const e4 = Events.listener(renkon.querySelector("#lane4"), "pointerdown", (evt) => evt);
@@ -292,18 +305,18 @@ const judge = ((notes, taps, _timer) => {
   const checked = [];
   for (let i = 0; i < 7; i++) {
     const tap = taps[i];
-    // if (tap && i === 0) {debugger;}
+    if (tap && i === 0) {debugger;}
     if (tap !== undefined && !checked[i]) {
       for (let j = 0; j < notes.array.length; j++) {
         const pattern = notes.array[j].pattern;
         const time = notes.array[j].time;
         const onLane = pattern.includes(i);
-        if (onLane) {
+        if (onLane && !checked[i]) {
           checked[i] = true;
           const diff = time - atLine;
-          if (diff < 300) {
+//          if ( -50 <= diff && diff <= 600) {
             test.push({lane: i, diff});
-          }
+//          }
         }
       }
     }
@@ -313,25 +326,25 @@ const judge = ((notes, taps, _timer) => {
 
 const result = Behaviors.select(
   {map: new Map()},
-  start, (_old, _now) => ({map: new Map([["-20+", 0], ["-20", 0], ["+20", 0], ["+20+", 0]])}),
+  start, (_old, _now) => ({map: new Map([["-20+", 0], ["<20", 0], ["+20+", 0]])}),
   judge, (old, judge) => {
     const incr = (diff) => {
       let label;
       if (diff < -20) {label = "-20+";}
-      else if (diff <= 0) {label = "-20";}
-      else if (diff <= 20) {label = "+20";}
-      else if (diff > 20) {label = "+20+";}
+      else if (diff <= 20) {label = "<20";}
+      else {label = "+20+";}
 
       const m = old.map;
       
       m.set(label, m.get(label) + 1);
     }
+    let d;
     for (const t of judge) {
       const {lane, diff} = t;
-      console.log(diff);
       incr(diff);
+      d = diff;
     }
-    return {map: old.map};
+    return {map: old.map, diff: d};
   }
 );
 
@@ -339,5 +352,8 @@ const result = Behaviors.select(
   const m = result.map;
   const str = \`\${[...m.values()]}\`;
   document.querySelector("#judge").textContent = str;
+  if (result.diff !== undefined) {
+    document.querySelector("#lastJudge").textContent = result.diff;
+  }
 })(result);
 `]]}
