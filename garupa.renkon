@@ -10,27 +10,27 @@
 "type":"move",
 "width":1009.7195575009789,
 "x":879.4606552368214,
-"y":-36.68908131267392}],["3",{"height":127.50435073802478,
+"y":-36.68908131267392}],["3",{"height":134.95972353908235,
 "id":"3",
-"type":"move",
-"width":629.3443454976517,
+"type":"resize",
+"width":685.8147577829122,
 "x":219.82948847288066,
 "y":-239.02581415395753}],["4",{"height":120,
 "id":"4",
 "type":"move",
 "width":744.9912621421097,
 "x":216.92428778591525,
-"y":-410.40500909349475}],["6",{"height":1923.8298213869753,
+"y":-410.40500909349475}],["6",{"height":2020.620453545078,
 "id":"6",
 "type":"resize",
-"width":962.8746253533244,
+"width":973.9539408166121,
 "x":-1089.715906623933,
-"y":228.15210138442123}],["19",{"height":1289.4970619449764,
+"y":228.15210138442123}],["19",{"height":1481.8833756351294,
 "id":"19",
-"type":"move",
-"width":865.0461970820924,
-"x":-158.41091535347385,
-"y":222.58375312266287}]]}},
+"type":"resize",
+"width":892.9018855825173,
+"x":-69.21512300554573,
+"y":217.75272250702503}]]}},
 "titles":{"map":{"__map":true,
 "values":[["1",{"id":"1",
 "state":false,
@@ -83,7 +83,7 @@
   <button id="time">Time</button>
 </div>
 <div id="judge"></div>
-<div id="lastJudge"></div>
+<div id="lastJudge" class="lastJudge"></div>
 \`.trim();
 
     document.body.querySelector("#renkon")?.remove();
@@ -187,13 +187,17 @@ Events.listener(window, "resize", resizer);
 })(renkon)
 `],
 [`3`, `const timer = Events.timer(4);
-const e1 = Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt);`],
+const e1 = Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt);
+const removeTimer = ((renkon) => {
+    renkon.querySelector("#time")?.remove();
+})(renkon);`],
 [`4`, `const time = Events.listener(renkon.querySelector("#time"), "click", (evt) => evt);
 const timer = Events.collect(start, time, (old, _t) => old + 50);
 const e1 = Behaviors.keep(Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt));`],
 [`6`, `const css = \`
 html, body, #renkon, #pad {
    height: 100%;
+   touch-action: none;
 }
 #buttonBox {
   position: absolute;
@@ -265,18 +269,23 @@ html, body, #renkon, #pad {
   height: 24px;
 }
 
-#lastJudge {
+.lastJudge {
   position: absolute;
+  font-size: 18px;
   top: 40%;
   right: 50px;
-  font-size: 18px;
   background-color: #aac;
   border-radius: 5px;
   border: 1px solid purple;
   width: 100px;
   height: 24px;
+  transition: transform 0.2s;
+  transform-origin: center;
 }
 
+.lastJudge[newJudge="true"] {
+  transform: scale(1.1);
+}
 \`
 
 const addCss = ((renkon, css) => {
@@ -314,9 +323,9 @@ const judge = ((notes, taps, _timer) => {
         if (onLane && !checked[i]) {
           checked[i] = true;
           const diff = time - atLine;
-//          if ( -50 <= diff && diff <= 600) {
+          if ( -50 <= diff && diff <= 600) {
             test.push({lane: i, diff});
-//          }
+          }
         }
       }
     }
@@ -348,12 +357,21 @@ const result = Behaviors.select(
   }
 );
 
-((result) => {
+const judgeUpdate = Events.change(((result) => {
   const m = result.map;
   const str = \`\${[...m.values()]}\`;
   document.querySelector("#judge").textContent = str;
   if (result.diff !== undefined) {
-    document.querySelector("#lastJudge").textContent = result.diff;
+    const dom = document.querySelector("#lastJudge");
+    dom.textContent = result.diff;
+    dom.setAttribute("newJudge", true);
+    return dom;
   }
-})(result);
+})(result));
+
+const delayedUpdate = Events.delay(judgeUpdate, 250);
+
+((judgeUpdate) => {
+  judgeUpdate.setAttribute("newJudge",false);
+})(delayedUpdate);
 `]]}
