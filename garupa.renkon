@@ -2,15 +2,15 @@
 "positions":{"map":{"__map":true,
 "values":[["1",{"height":653.2879719430376,
 "id":"1",
-"type":"resize",
+"type":"move",
 "width":657.2138851475773,
-"x":-544.0791461613585,
-"y":-750.1632464103108}],["2",{"height":1732.6734058267516,
+"x":-1044.6344472808373,
+"y":-487.6029898039355}],["2",{"height":1870.789042244034,
 "id":"2",
 "type":"move",
-"width":1009.7195575009789,
-"x":879.4606552368214,
-"y":-36.68908131267392}],["3",{"height":134.95972353908235,
+"width":1057.9533772459333,
+"x":1097.5137328859455,
+"y":-37.92946587461319}],["3",{"height":134.95972353908235,
 "id":"3",
 "type":"resize",
 "width":685.8147577829122,
@@ -25,12 +25,12 @@
 "type":"resize",
 "width":973.9539408166121,
 "x":-1089.715906623933,
-"y":228.15210138442123}],["19",{"height":1481.8833756351294,
+"y":228.15210138442123}],["19",{"height":1613.8395141343128,
 "id":"19",
 "type":"resize",
-"width":892.9018855825173,
-"x":-69.21512300554573,
-"y":217.75272250702503}]]}},
+"width":910.4905731115409,
+"x":32.16346574369081,
+"y":217.3610221190442}]]}},
 "titles":{"map":{"__map":true,
 "values":[["1",{"id":"1",
 "state":false,
@@ -58,7 +58,7 @@
 "values":[["1","code"],["2","code"],["3","code"],["4","code"],["6","code"],["19","code"]]}},
 "windows":["1","2","3","4","6","19"],
 "zIndex":{"map":{"__map":true,
-"values":[["1",108],["2",105],["3",101],["4",103],["6",106],["19",109]]}}}
+"values":[["1",109],["2",105],["3",101],["4",103],["6",106],["19",108]]}}}
 {__codeMap: true, value: [[`1`, `const renkon = (() => {
     const renkon = document.createElement("div");
     renkon.id = "renkon";
@@ -100,13 +100,20 @@ const startClick = Events.listener(renkon.querySelector("#start"), "click", (evt
 
 class Sequencer {
   get(i) {
-    const time = i * 300;
-    switch (i % 3) {
+    const index = i % 5;
+    const frame = Math.floor(i / 5);
+    const timeOffset = [0, 400, 800, 1050, 1300][index];
+    const time = frame * 1800 + timeOffset;
+    switch (index) {
       case 0:
-        return {time, pattern: [0]}
+        return {time, pattern: [2, 5]}
       case 1:
-        return {time, pattern: [3]}
+        return {time, pattern: [2, 5]}
       case 2:
+        return {time, pattern: [3]}
+      case 3:
+        return {time, pattern: [4]}
+      case 4:
         return {time, pattern: [5]}
     }
   }
@@ -172,6 +179,7 @@ const doms = Behaviors.collect(new Map(), notes, (now, notes) => {
 });
 
 const resizer =  (evt) => {
+  console.log("resizer");
     const scaler = document.body.querySelector("#scale");
     const pad = document.body.querySelector("#pad");
     const scaleX = window.innerWidth / 500;
@@ -202,7 +210,7 @@ html, body, #renkon, #pad {
 #buttonBox {
   position: absolute;
   top: 50px;
-  left: 50px;
+  left: 50%;
 }
 .note {
   position: absolute;
@@ -312,10 +320,12 @@ const judge = ((notes, taps, _timer) => {
   const atLine = elapsed - noteDuration + 50;
   let test = [];
   const checked = [];
+  let touches = 0;
   for (let i = 0; i < 7; i++) {
     const tap = taps[i];
-    if (tap && i === 0) {debugger;}
+    // if (tap && i === 0) {debugger;}
     if (tap !== undefined && !checked[i]) {
+      touches++;
       for (let j = 0; j < notes.array.length; j++) {
         const pattern = notes.array[j].pattern;
         const time = notes.array[j].time;
@@ -330,6 +340,7 @@ const judge = ((notes, taps, _timer) => {
       }
     }
   }
+  // if (touches > 0) console.log(touches)
   return test;
 })(notes, taps, timer);
 
@@ -347,13 +358,13 @@ const result = Behaviors.select(
       
       m.set(label, m.get(label) + 1);
     }
-    let d;
+    let d = [];
     for (const t of judge) {
       const {lane, diff} = t;
       incr(diff);
-      d = diff;
+      d.push(diff);
     }
-    return {map: old.map, diff: d};
+    return {map: old.map, diff: d.join(",")};
   }
 );
 
@@ -363,15 +374,20 @@ const judgeUpdate = Events.change(((result) => {
   document.querySelector("#judge").textContent = str;
   if (result.diff !== undefined) {
     const dom = document.querySelector("#lastJudge");
-    dom.textContent = result.diff;
-    dom.setAttribute("newJudge", true);
-    return dom;
+    if (result.diff.length > 0) {
+      dom.textContent = result.diff;
+      dom.setAttribute("newJudge", true);
+      return dom;
+    }
   }
+  return null;
 })(result));
 
 const delayedUpdate = Events.delay(judgeUpdate, 250);
 
 ((judgeUpdate) => {
-  judgeUpdate.setAttribute("newJudge",false);
+  if (judgeUpdate) {
+    judgeUpdate.setAttribute("newJudge",false);
+  }
 })(delayedUpdate);
 `]]}
