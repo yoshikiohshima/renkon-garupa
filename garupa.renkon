@@ -30,13 +30,18 @@
 "type":"resize",
 "width":910.4905731115409,
 "x":32.16346574369081,
-"y":217.3610221190442}]]}},
+"y":217.3610221190442}],["53",{"height":285.31924216833147,
+"id":"53",
+"type":"resize",
+"width":825.2975600974639,
+"x":-99.77525817765765,
+"y":-90.57160507174137}]]}},
 "titles":{"map":{"__map":true,
 "values":[["1",{"id":"1",
 "state":false,
 "title":"DOM"}],["2",{"id":"2",
 "state":false,
-"title":"untitled"}],["3",{"id":"3",
+"title":"Notes"}],["3",{"id":"3",
 "state":false,
 "title":"timer"}],["4",{"id":"4",
 "state":false,
@@ -44,7 +49,9 @@
 "state":false,
 "title":"CSS"}],["19",{"id":"19",
 "state":false,
-"title":"Events"}]]}},
+"title":"Events"}],["53",{"id":"53",
+"state":false,
+"title":"Safari"}]]}},
 "version":2,
 "windowEnabled":{"map":{"__map":true,
 "values":[["1",{"enabled":true,
@@ -53,12 +60,13 @@
 "id":"3"}],["4",{"enabled":false,
 "id":"4"}],["6",{"enabled":true,
 "id":"6"}],["19",{"enabled":true,
-"id":"19"}]]}},
+"id":"19"}],["53",{"enabled":true,
+"id":"53"}]]}},
 "windowTypes":{"map":{"__map":true,
-"values":[["1","code"],["2","code"],["3","code"],["4","code"],["6","code"],["19","code"]]}},
-"windows":["1","2","3","4","6","19"],
+"values":[["1","code"],["2","code"],["3","code"],["4","code"],["6","code"],["19","code"],["53","code"]]}},
+"windows":["1","2","3","4","6","19","53"],
 "zIndex":{"map":{"__map":true,
-"values":[["1",109],["2",105],["3",101],["4",103],["6",106],["19",108]]}}}
+"values":[["1",109],["2",105],["3",101],["4",103],["6",106],["19",108],["53",110]]}}}
 {__codeMap: true, value: [[`1`, `const renkon = (() => {
     const renkon = document.createElement("div");
     renkon.id = "renkon";
@@ -179,7 +187,6 @@ const doms = Behaviors.collect(new Map(), notes, (now, notes) => {
 });
 
 const resizer =  (evt) => {
-  console.log("resizer");
     const scaler = document.body.querySelector("#scale");
     const pad = document.body.querySelector("#pad");
     const scaleX = window.innerWidth / 500;
@@ -390,4 +397,18 @@ const delayedUpdate = Events.delay(judgeUpdate, 250);
     judgeUpdate.setAttribute("newJudge",false);
   }
 })(delayedUpdate);
+`],
+[`53`, `Events.listener(document.body, "gesturestart", preventDefaultSafari);
+Events.listener(document.body, "gesturechange", preventDefaultSafari);
+Events.listener(document.body, "gestureend", preventDefaultSafari);
+
+const preventDefaultSafari = (evt) => {
+    if (!isSafari || isMobile) {
+        evt.preventDefault();
+    }
+    return evt;
+};
+
+const isSafari = window.navigator.userAgent.includes("Safari") && !window.navigator.userAgent.includes("Chrome");
+const isMobile = !!("ontouchstart" in window);
 `]]}
