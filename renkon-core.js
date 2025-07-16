@@ -6549,6 +6549,7 @@ const defaultGlobals = /* @__PURE__ */ new Set([
   "Boolean",
   "BigInt",
   "btoa",
+  "cancelAnimationFrame",
   "clearInterval",
   "clearTimeout",
   "console",
@@ -6565,6 +6566,7 @@ const defaultGlobals = /* @__PURE__ */ new Set([
   "Error",
   "escape",
   "eval",
+  "EventSource",
   "fetch",
   "File",
   "FileList",
@@ -6585,6 +6587,7 @@ const defaultGlobals = /* @__PURE__ */ new Set([
   "JSON",
   "Map",
   "Math",
+  "MessageChannel",
   "NaN",
   "Number",
   "navigator",
@@ -6599,12 +6602,12 @@ const defaultGlobals = /* @__PURE__ */ new Set([
   "ReferenceError",
   "Reflect",
   "RegExp",
-  "cancelAnimationFrame",
   "requestAnimationFrame",
   "Set",
   "setInterval",
   "setTimeout",
   "String",
+  "structuredClone",
   "Symbol",
   "SyntaxError",
   "TextDecoder",
@@ -6668,6 +6671,7 @@ function checkAssignments(node, references, input) {
   });
 }
 function findDeclarations(node, input) {
+  var _a2, _b2;
   const declarations = [];
   function declareLocal(node2) {
     if (globals[node2.name] === false || node2.name === "arguments") {
@@ -6706,7 +6710,55 @@ function findDeclarations(node, input) {
       case "ImportDeclaration":
         child.specifiers.forEach((node2) => declareLocal(node2.local));
         break;
+      case "ExportNamedDeclaration":
+        if (((_a2 = child.declaration) == null ? void 0 : _a2.type) === "VariableDeclaration") {
+          child.declaration.declarations.forEach((node2) => declarePattern(node2.id));
+        } else if (((_b2 = child.declaration) == null ? void 0 : _b2.type) === "FunctionDeclaration") {
+          declareLocal(child.declaration.id);
+        }
     }
+  }
+  return declarations;
+}
+function findTopLevelDeclarations(node) {
+  var _a2, _b2;
+  const declarations = [];
+  function declareLocal(node2) {
+    declarations.push(node2.name);
+  }
+  function declarePattern(node2) {
+    switch (node2.type) {
+      case "Identifier":
+        declareLocal(node2);
+        break;
+      case "ObjectPattern":
+        node2.properties.forEach((node3) => declarePattern(node3.type === "Property" ? node3.value : node3));
+        break;
+      case "ArrayPattern":
+        node2.elements.forEach((node3) => node3 && declarePattern(node3));
+        break;
+      case "RestElement":
+        declarePattern(node2.argument);
+        break;
+      case "AssignmentPattern":
+        declarePattern(node2.left);
+        break;
+    }
+  }
+  switch (node.type) {
+    case "VariableDeclaration":
+      node.declarations.forEach((child) => declarePattern(child.id));
+      break;
+    case "ClassDeclaration":
+    case "FunctionDeclaration":
+      declareLocal(node.id);
+      break;
+    case "ExportNamedDeclaration":
+      if (((_a2 = node.declaration) == null ? void 0 : _a2.type) === "VariableDeclaration") {
+        node.declaration.declarations.forEach((child) => declarePattern(child.id));
+      } else if (((_b2 = node.declaration) == null ? void 0 : _b2.type) === "FunctionDeclaration") {
+        declareLocal(node.declaration.id);
+      }
   }
   return declarations;
 }
@@ -9028,19 +9080,18 @@ function detype(input) {
   return String(output);
 }
 function removeTypeNode(output, node) {
-  if (node.type.startsWith("TS")) {
-    output.delete(node.start, node.end);
+  if (Array.isArray(node)) {
+    node.forEach((a2) => removeTypeNode(output, a2));
     return;
   }
-  for (let k2 in node) {
-    let v2 = node[k2];
-    if (Array.isArray(v2)) {
-      v2.forEach((a2) => removeTypeNode(output, a2));
-      continue;
+  if (typeof node === "object" && node !== null && typeof node.type === "string") {
+    if (node.type.startsWith("TS")) {
+      output.delete(node.start, node.end);
+      return;
     }
-    if (typeof v2 === "object" && v2 !== null && v2 instanceof Node) {
+    for (let k2 in node) {
+      let v2 = node[k2];
       removeTypeNode(output, v2);
-      continue;
     }
   }
 }
@@ -9051,11 +9102,15 @@ const acornOptions = {
 function findDecls(input) {
   const body = parseProgram(input);
   const list2 = body.body;
-  return list2.map((decl) => ({
-    code: input.slice(decl.start, decl.end),
-    start: decl.start,
-    end: decl.end
-  }));
+  return list2.map((decl) => {
+    const decls = findTopLevelDeclarations(decl);
+    return {
+      code: input.slice(decl.start, decl.end),
+      start: decl.start,
+      end: decl.end,
+      decls
+    };
+  });
 }
 function isCompilerArtifact(b2) {
   if (b2.type !== "Program") {
@@ -9103,7 +9158,7 @@ function topLevelType(b2) {
   return "";
 }
 function parseJavaScript(input, initialId, flattened = false) {
-  var _a2;
+  var _a2, _b2;
   let decls;
   try {
     input = detype(input);
@@ -9128,7 +9183,7 @@ function parseJavaScript(input, initialId, flattened = false) {
       continue;
     }
     if (rewriteSpecs.length === 0) {
-      const myId = ((_a2 = declarations[0]) == null ? void 0 : _a2.name) || `${id}`;
+      const myId = ((_a2 = declarations[0]) == null ? void 0 : _a2.name) ? (_b2 = declarations[0]) == null ? void 0 : _b2.name : flattened ? `${initialId}` : `${id}`;
       const topType = topLevelType(b2);
       allReferences.push({
         id: myId,
@@ -9176,7 +9231,7 @@ function parseJavaScript(input, initialId, flattened = false) {
           break;
         }
       }
-      const parsed = parseJavaScript(`${newPart}${overridden ? "" : "\n" + newInput}`, again ? id - 1 : initialId, !again);
+      const parsed = parseJavaScript(`${newPart}${overridden ? "" : "\n" + newInput}`, again ? id - 1 : id, !again);
       allReferences.push(...parsed);
     }
   }
@@ -9197,13 +9252,13 @@ function transpileJavaScript(node) {
   });
   const forceVars = Array.from(new Set(node.forceVars.map((r) => r.name))).filter((n2) => globals[n2] !== false);
   const output = new Sourcemap(node.input).trim();
+  rewriteExport(output, node.body);
   rewriteRenkonCalls(output, node.body);
   output.insertLeft(0, `, body: (${inputs}) => {
 `);
   output.insertLeft(0, `, outputs: ${JSON.stringify(only)}`);
   output.insertLeft(0, `, inputs: ${JSON.stringify(inputs)}`);
   output.insertLeft(0, `, forceVars: ${JSON.stringify(forceVars)}`);
-  output.insertLeft(0, `, blockId: "${node.blockId}"`);
   output.insertLeft(0, `, topType: "${node.topType}"`);
   output.insertLeft(0, `{id: "${node.id}"`);
   output.insertRight(node.input.length, `
@@ -9215,13 +9270,14 @@ function getFunctionBody(input, forMerge) {
   const compiled = parseJavaScript(input, 0, true);
   const node = compiled[0].body.body[0];
   const params = getParams(node);
+  const types2 = getTypes(node);
   const body = node.body.body;
   const last = body[body.length - 1];
-  const returnValues = forMerge ? [] : getReturn(last);
+  const returnValues = forMerge ? {} : getReturn(last);
   const output = new Sourcemap(input).trim();
   output.delete(0, body[0].start);
   output.delete(last.start, input.length);
-  return { params, returnValues, output: String(output) };
+  return { params, types: types2, returnValues, output: String(output) };
 }
 function getParams(node) {
   if (node.params.length === 0) {
@@ -9251,6 +9307,41 @@ function getParams(node) {
   }
   return [];
 }
+function getTypes(node) {
+  if (node.params.length < 2) {
+    return null;
+  }
+  const param = node.params[1];
+  if (param.type !== "AssignmentPattern") {
+    return null;
+  }
+  if (param.left.type !== "Identifier") {
+    return null;
+  }
+  if (param.right.type !== "ObjectExpression") {
+    return null;
+  }
+  const types2 = /* @__PURE__ */ new Map();
+  for (const prop of param.right.properties) {
+    if (!prop) {
+      continue;
+    }
+    if (prop.type !== "Property") {
+      continue;
+    }
+    if (prop.key.type !== "Identifier") {
+      continue;
+    }
+    if (prop.value.type !== "Literal") {
+      continue;
+    }
+    if (typeof prop.value.value !== "string") {
+      continue;
+    }
+    types2.set(prop.key.name, prop.value.value.startsWith("Event") ? "Event" : "Behavior");
+  }
+  return types2;
+}
 function getReturn(returnNode) {
   if (returnNode.type !== "ReturnStatement") {
     console.error("cannot convert");
@@ -9258,13 +9349,8 @@ function getReturn(returnNode) {
   }
   const returnValue = returnNode.argument;
   if (returnValue && returnValue.type === "ArrayExpression") {
-    for (const elem of returnValue.elements) {
-      if (!elem || elem.type !== "Identifier") {
-        console.error("cannot convert");
-        return null;
-      }
-    }
-    return returnValue.elements.map((e) => e.name);
+    console.log("array form no longer supported");
+    return null;
   }
   if (returnValue && returnValue.type === "ObjectExpression") {
     const result = {};
@@ -9282,14 +9368,23 @@ function getReturn(returnNode) {
         return null;
       }
       result[prop.key.name] = prop.value.name;
-      return result;
     }
+    return result;
   }
   return null;
 }
 function quote(node, output) {
   output.insertLeft(node.start, '"');
   output.insertRight(node.end, '"');
+}
+function rewriteExport(output, body) {
+  const first = body.body[0];
+  if (first.type !== "ExportNamedDeclaration") {
+    return;
+  }
+  const start = first.start;
+  const end = start + "export ".length;
+  output.replaceLeft(start, end, "");
 }
 function rewriteRenkonCalls(output, body) {
   simple(body, {
@@ -9309,6 +9404,8 @@ function rewriteRenkonCalls(output, body) {
             } else if (selector === "send") {
               quote(node.arguments[0], output);
             } else if (["collect", "_select"].includes(selector)) {
+              output.insertLeft(node.arguments[0].start, "(() => (");
+              output.insertRight(node.arguments[0].end, "))");
               quote(node.arguments[1], output);
             }
           }
@@ -9317,6 +9414,8 @@ function rewriteRenkonCalls(output, body) {
           if (callee.property.type === "Identifier") {
             const selector = callee.property.name;
             if (["collect", "_select"].includes(selector)) {
+              output.insertLeft(node.arguments[0].start, "(() => (");
+              output.insertRight(node.arguments[0].end, "))");
               quote(node.arguments[1], output);
             } else if (["or", "_or_index", "some"].includes(selector)) {
               for (const arg of node.arguments) {
@@ -9329,7 +9428,7 @@ function rewriteRenkonCalls(output, body) {
     }
   });
 }
-const version$1 = "0.7.5";
+const version$1 = "0.8.8";
 const packageJson = {
   version: version$1
 };
@@ -9430,8 +9529,9 @@ class DelayedEvent extends Stream {
     return this;
   }
   evaluate(state, node, inputArray, lastInputArray) {
+    var _a2;
     const value = state.spliceDelayedQueued(state.scratch.get(node.id), state.time);
-    if (value !== void 0) {
+    if (value !== void 0 && ((_a2 = state.resolved.get(node.id)) == null ? void 0 : _a2.value) !== value) {
       state.setResolved(node.id, { value, time: state.time });
     }
     const inputIndex = 0;
@@ -9439,6 +9539,7 @@ class DelayedEvent extends Stream {
     const doIt = this[isBehaviorKey] && myInput !== void 0 && myInput !== (lastInputArray == null ? void 0 : lastInputArray[inputIndex]) || !this[isBehaviorKey] && myInput !== void 0;
     if (doIt) {
       const scratch = state.scratch.get(node.id);
+      state.requestAlarm(this.delay);
       scratch.queue.push({ time: state.time + this.delay, value: myInput });
     }
   }
@@ -9447,7 +9548,9 @@ class TimerEvent extends Stream {
   constructor(interval, isBehavior) {
     super(timerType, isBehavior);
     __publicField(this, "interval");
+    __publicField(this, "scheduled");
     this.interval = interval;
+    this.scheduled = -1;
   }
   created(_state, _id) {
     return this;
@@ -9461,6 +9564,7 @@ class TimerEvent extends Stream {
   evaluate(state, node, _inputArray, _lastInputArray) {
     const interval = this.interval;
     const logicalTrigger = interval * Math.floor(state.time / interval);
+    state.requestAlarm(this.interval);
     state.setResolved(node.id, { value: logicalTrigger, time: state.time });
     state.scratch.set(node.id, logicalTrigger);
   }
@@ -9483,6 +9587,8 @@ class PromiseEvent extends Stream {
       const wasResolved = (_a3 = state.resolved.get(id)) == null ? void 0 : _a3.value;
       if (!wasResolved) {
         state.scratch.set(id, { promise });
+        state.requestAlarm(1);
+        state.scheduleAlarm();
         state.setResolved(id, { value, time: state.time });
       }
     });
@@ -9498,6 +9604,26 @@ class OrStream extends Stream {
     this.varNames = varNames;
     this.useIndex = useIndex;
     this.collection = collection;
+  }
+  ready(node, state) {
+    var _a2, _b2;
+    const lastInputArray = state.inputArray.get(node.id);
+    if (!lastInputArray) {
+      for (let i2 = 0; i2 < node.inputs.length; i2++) {
+        const myInput = (_a2 = state.resolved.get(node.inputs[i2])) == null ? void 0 : _a2.value;
+        if (myInput !== void 0) {
+          return true;
+        }
+      }
+      return false;
+    }
+    for (let i2 = 0; i2 < node.inputs.length; i2++) {
+      const myInput = (_b2 = state.resolved.get(node.inputs[i2])) == null ? void 0 : _b2.value;
+      if (myInput !== void 0 && myInput !== lastInputArray[i2]) {
+        return true;
+      }
+    }
+    return false;
   }
   evaluate(state, node, inputArray, lastInputArray) {
     if (this.collection) {
@@ -9644,25 +9770,35 @@ class CollectStream extends Stream {
     this.updater = updater;
   }
   created(state, id) {
-    if (this.init && typeof this.init === "object" && this.init.then) {
-      this.init.then((value) => {
-        state.streams.set(id, this);
-        this.init = value;
+    const scratch = state.scratch.get(id);
+    state.streams.set(id, this);
+    if (scratch) {
+      const resolving = scratch.resolving;
+      if (resolving === true || typeof resolving !== "boolean") {
+        return this;
+      }
+    }
+    const initValue = this.init();
+    if (initValue && typeof initValue === "object" && initValue.then) {
+      state.scratch.set(id, { resolving: true });
+      initValue.then((value) => {
+        state.requestAlarm(1);
+        state.scheduleAlarm();
         state.setResolved(id, { value, time: state.time });
-        state.scratch.set(id, { current: this.init });
+        state.scratch.set(id, { current: value });
       });
       return this;
     }
-    if (!state.scratch.get(id)) {
-      state.streams.set(id, this);
-      state.setResolved(id, { value: this.init, time: state.time });
-      state.scratch.set(id, { current: this.init });
-    }
+    state.setResolved(id, { value: initValue, time: state.time });
+    state.scratch.set(id, { current: initValue });
     return this;
   }
   evaluate(state, node, inputArray, lastInputArray) {
     const scratch = state.scratch.get(node.id);
     if (!scratch) {
+      return;
+    }
+    if (scratch.resolving) {
       return;
     }
     const inputIndex = node.inputs.indexOf(this.varName);
@@ -9672,6 +9808,8 @@ class CollectStream extends Stream {
       if (newValue !== void 0) {
         if (newValue !== null && newValue.then) {
           newValue.then((value) => {
+            state.requestAlarm(1);
+            state.scheduleAlarm();
             state.setResolved(node.id, { value, time: state.time });
             state.scratch.set(node.id, { current: value });
           });
@@ -9694,25 +9832,35 @@ class SelectStream extends Stream {
     this.updaters = updaters;
   }
   created(state, id) {
-    if (this.init && typeof this.init === "object" && this.init.then) {
-      this.init.then((value) => {
-        state.streams.set(id, this);
-        this.init = value;
+    const scratch = state.scratch.get(id);
+    state.streams.set(id, this);
+    if (scratch) {
+      const resolving = scratch.resolving;
+      if (resolving === true || typeof resolving !== "boolean") {
+        return this;
+      }
+    }
+    const initValue = this.init();
+    if (initValue && typeof initValue === "object" && initValue.then) {
+      state.scratch.set(id, { resolving: true });
+      initValue.then((value) => {
+        state.requestAlarm(1);
+        state.scheduleAlarm();
         state.setResolved(id, { value, time: state.time });
-        state.scratch.set(id, { current: this.init });
+        state.scratch.set(id, { current: value });
       });
       return this;
     }
-    if (!state.scratch.get(id)) {
-      state.streams.set(id, this);
-      state.setResolved(id, { value: this.init, time: state.time });
-      state.scratch.set(id, { current: this.init });
-    }
+    state.setResolved(id, { value: initValue, time: state.time });
+    state.scratch.set(id, { current: initValue });
     return this;
   }
   evaluate(state, node, inputArray, _lastInputArray) {
     const scratch = state.scratch.get(node.id);
     if (scratch === void 0) {
+      return;
+    }
+    if (scratch.resolving) {
       return;
     }
     const inputIndex = node.inputs.indexOf(this.varName);
@@ -9722,6 +9870,8 @@ class SelectStream extends Stream {
       if (newValue !== void 0) {
         if (newValue !== null && newValue.then) {
           newValue.then((value) => {
+            state.requestAlarm(1);
+            state.scheduleAlarm();
             state.setResolved(node.id, { value, time: state.time });
             state.scratch.set(node.id, { current: value });
           });
@@ -9812,6 +9962,8 @@ class ResolvePart extends Stream {
         const wasResolved = (_a2 = state.resolved.get(id)) == null ? void 0 : _a2.value;
         if (!wasResolved) {
           this.resolved = true;
+          state.requestAlarm(1);
+          state.scheduleAlarm();
           if (Array.isArray(this.object)) {
             const result = [...this.object];
             const indices = this.indices;
@@ -9853,6 +10005,8 @@ class GeneratorNextEvent extends Stream {
       var _a2;
       const wasResolved = (_a2 = state.resolved.get(id)) == null ? void 0 : _a2.value;
       if (!wasResolved) {
+        state.requestAlarm(1);
+        state.scheduleAlarm();
         state.setResolved(id, { value, time: state.time });
       }
     });
@@ -9867,8 +10021,13 @@ class GeneratorNextEvent extends Stream {
           const promise = this.generator.next();
           promise.then((value2) => {
             var _a3;
+            if (this.generator.done) {
+              return;
+            }
             const wasResolved = (_a3 = state.resolved.get(varName)) == null ? void 0 : _a3.value;
             if (!wasResolved) {
+              state.requestAlarm(1);
+              state.scheduleAlarm();
               state.setResolved(varName, { value: value2, time: state.time });
             }
           });
@@ -9933,6 +10092,8 @@ function eventBody(args) {
   }
   const notifier = (value) => {
     record.queue.push({ value, time: 0 });
+    state.requestAlarm(1);
+    state.scheduleAlarm();
   };
   if (realDom && !forObserve && eventName) {
     if (eventHandler) {
@@ -9940,9 +10101,8 @@ function eventBody(args) {
         const value = eventHandler(evt);
         if (value !== void 0) {
           record.queue.push({ value, time: 0 });
-          if (state.noTicking) {
-            state.noTickingEvaluator();
-          }
+          state.requestAlarm(1);
+          state.scheduleAlarm();
         }
       };
     } else {
@@ -10155,27 +10315,59 @@ function difference(oldSet, newSet) {
   return result;
 }
 class ProgramState {
-  constructor(startTime, app, noTicking) {
+  constructor(startTime, app) {
+    // the program that user set with "setupProgram"
     __publicField(this, "scripts");
-    __publicField(this, "order");
-    __publicField(this, "types");
-    __publicField(this, "nodes");
-    __publicField(this, "streams");
-    __publicField(this, "scratch");
-    __publicField(this, "resolved");
-    __publicField(this, "inputArray");
-    __publicField(this, "changeList");
-    __publicField(this, "time");
-    __publicField(this, "startTime");
-    __publicField(this, "evaluatorRunning");
-    __publicField(this, "exports");
-    __publicField(this, "imports");
-    __publicField(this, "updated");
+    // a place where a user program can access additional objects and values via Renkon.app
     __publicField(this, "app");
-    __publicField(this, "noTicking");
-    __publicField(this, "log");
+    // the options for evaluate
+    __publicField(this, "options");
+    // topological sort of node names that the evaluator walks through
+    __publicField(this, "order");
+    // the Behavior or Event for each node
+    __publicField(this, "types");
+    // compiled nodes that holds information such as input names and body
+    __publicField(this, "nodes");
+    // a cache, so to speak, to keep the streams of known variations
+    __publicField(this, "streams");
+    // another cache memory for streams to remember additional information
+    __publicField(this, "scratch");
+    // the values for nodes
+    __publicField(this, "resolved");
+    // the memory to check whether the current input values are different from last time
+    __publicField(this, "inputArray");
+    // the buffer to store the values send via "Events.send"
+    __publicField(this, "changeList");
+    // a set of node names that are used in $-dependencies.
+    __publicField(this, "nextDeps");
+    // the current logical time.
+    __publicField(this, "time");
+    // the "physical start time" of this ProgramState instance
+    __publicField(this, "startTime");
+    // indicates that the last evaluation of the program resulted in an error
+    __publicField(this, "errored");
+    // a flag whether any resolved value was updated in an evaluation step
+    __publicField(this, "updated");
+    //  a timer of some kind that will call evaluate() in the later time.
+    __publicField(this, "pendingEvaluation");
+    // user visible meta feature that has the currently evaluating node
+    __publicField(this, "thisNode");
+    // ProgramStates instantiated from the component that is created with "Renkon.component" call
     __publicField(this, "programStates");
-    __publicField(this, "lastReturned");
+    // "key" to subprogram
+    // The nodes of the owns a component, so that a node can trigger recomputation when
+    // a component updates intenally
+    __publicField(this, "hasComponent");
+    // the owning varName to keys
+    // the owner of a component
+    __publicField(this, "componentParent");
+    // indicates that a component updated in an evaluation cycle
+    __publicField(this, "componentUpdated");
+    // a flag to set and reset whether scheduleAlarm should do its work
+    __publicField(this, "noSelfSchedule");
+    __publicField(this, "evaluationAlarm");
+    __publicField(this, "pendingAnimationFrame");
+    __publicField(this, "log");
     __publicField(this, "futureScripts");
     __publicField(this, "breakpoints");
     this.scripts = [];
@@ -10188,56 +10380,222 @@ class ProgramState {
     this.inputArray = /* @__PURE__ */ new Map();
     this.time = 0, this.changeList = /* @__PURE__ */ new Map();
     this.startTime = startTime;
-    this.evaluatorRunning = 0;
     this.updated = false;
+    this.evaluationAlarm = [];
+    this.pendingAnimationFrame = false;
+    this.noSelfSchedule = false;
+    this.pendingEvaluation = null;
     this.app = app;
     this.log = (...values) => {
       console.log(...values);
     };
-    this.noTicking = noTicking !== void 0 ? noTicking : false;
+    this.hasComponent = /* @__PURE__ */ new Map();
+    this.componentUpdated = false;
     this.programStates = /* @__PURE__ */ new Map();
     this.breakpoints = /* @__PURE__ */ new Set();
+    this.nextDeps = /* @__PURE__ */ new Set();
   }
-  evaluator() {
-    if (this.noTicking) {
-      return this.noTickingEvaluator();
-    }
-    this.evaluatorRunning = window.requestAnimationFrame(() => this.evaluator());
-    try {
-      this.evaluate(Date.now());
-    } catch (e) {
-      console.error(e);
-      this.log("stopping animation");
-      window.cancelAnimationFrame(this.evaluatorRunning);
-      this.evaluatorRunning = 0;
-    }
-  }
-  noTickingEvaluator() {
-    this.noTicking = true;
-    if (this.evaluatorRunning !== 0) {
+  start() {
+    var _a2, _b2, _c;
+    if ((_a2 = this.options) == null ? void 0 : _a2.once) {
       return;
     }
-    this.evaluatorRunning = setTimeout(() => {
+    if (!((_b2 = this.options) == null ? void 0 : _b2.ticker)) {
+      this.noSelfSchedule = false;
+      this.requestAlarm(1);
+      this.scheduleAlarm();
+      return;
+    }
+    if (this.pendingEvaluation) {
+      return;
+    }
+    if ((_c = this.options) == null ? void 0 : _c.noAnimationFrame) {
+      this.pendingEvaluation = {
+        type: "setInterval",
+        handle: setInterval(() => this.tickingEvaluator(), 16)
+      };
+      return;
+    }
+    this.pendingEvaluation = {
+      type: "animationFrame",
+      handle: requestAnimationFrame(() => {
+        if (this.pendingEvaluation) {
+          this.pendingEvaluation.handle = requestAnimationFrame(() => this.start());
+        }
+        this.tickingEvaluator();
+      })
+    };
+  }
+  stop() {
+    var _a2, _b2;
+    if (!this.pendingEvaluation) {
+      return;
+    }
+    if ((_a2 = this.options) == null ? void 0 : _a2.once) {
+      return;
+    }
+    if (!((_b2 = this.options) == null ? void 0 : _b2.ticker)) {
+      this.noSelfSchedule = true;
+    }
+    if (this.pendingEvaluation.type === "setInterval") {
+      clearInterval(this.pendingEvaluation.handle);
+    } else if (this.pendingEvaluation.type === "animationFrame") {
+      cancelAnimationFrame(this.pendingEvaluation.handle);
+      this.pendingAnimationFrame = false;
+    }
+    this.pendingEvaluation = null;
+  }
+  tickingEvaluator() {
+    if (!this.pendingEvaluation && !this.errored) {
+      this.start();
+      return;
+    }
+    let success;
+    try {
+      this.evaluate(Date.now());
+      success = true;
+    } catch (e) {
+      console.error(e);
+      this.thisNode = void 0;
+      this.errored = e;
+      this.log("stopping animation");
+      this.stop();
+      success = false;
+    }
+    return success;
+  }
+  requestAlarm(timeOffset) {
+    var _a2;
+    if (this.errored) {
+      return;
+    }
+    if (this.componentParent) {
+      this.componentParent.requestAlarm(timeOffset);
+    }
+    if ((_a2 = this.options) == null ? void 0 : _a2.ticker) {
+      return;
+    }
+    const maybeAlarm = this.time + timeOffset;
+    let stored = false;
+    if (this.evaluationAlarm.length > 0 && maybeAlarm < this.evaluationAlarm[0]) {
+      stored = true;
+      this.evaluationAlarm.unshift(maybeAlarm);
+    } else {
+      for (let i2 = 0; i2 < this.evaluationAlarm.length - 1; i2++) {
+        const prev = this.evaluationAlarm[i2];
+        const next = this.evaluationAlarm[i2 + 1];
+        if (maybeAlarm === prev) {
+          stored = true;
+          break;
+        }
+        if (prev < maybeAlarm && maybeAlarm < next) {
+          this.evaluationAlarm.splice(i2 + 1, 0, maybeAlarm);
+          stored = true;
+          break;
+        }
+      }
+    }
+    if (!stored) {
+      this.evaluationAlarm.push(maybeAlarm);
+    }
+  }
+  scheduleAlarm() {
+    var _a2, _b2, _c, _d;
+    const log = (..._args) => {
+    };
+    if (this.componentParent) {
+      this.componentUpdated = true;
+      this.componentParent.scheduleAlarm();
+      return;
+    }
+    if (((_a2 = this.options) == null ? void 0 : _a2.ticker) || ((_b2 = this.options) == null ? void 0 : _b2.once)) {
+      return;
+    }
+    if (this.noSelfSchedule) {
+      return;
+    }
+    const maybeAlarm = this.evaluationAlarm[0];
+    log("schedule", maybeAlarm, this.time, this.evaluationAlarm, this.pendingEvaluation);
+    if (this.errored) {
+      return;
+    }
+    let keptAnimation = false;
+    if (this.pendingEvaluation) {
+      if (this.pendingEvaluation.type === "setTimeout") {
+        clearTimeout(this.pendingEvaluation.handle);
+      } else if (this.pendingEvaluation.type === "animationFrame") {
+        if (maybeAlarm !== void 0 && maybeAlarm - this.time < 20) {
+          keptAnimation = true;
+        } else {
+          this.pendingAnimationFrame = false;
+          log("clear animationframe", this.pendingEvaluation);
+        }
+      }
+      if (!keptAnimation) {
+        this.pendingEvaluation = null;
+      }
+    }
+    if (maybeAlarm === void 0) {
+      return;
+    }
+    if (maybeAlarm - this.time < 20 && ((_c = this.options) == null ? void 0 : _c.noAnimationFrame) !== true) {
+      if (!keptAnimation) {
+        this.pendingAnimationFrame = true;
+        this.pendingEvaluation = {
+          type: "animationFrame",
+          handle: this.scheduler()
+        };
+        log("start animationframe", this.pendingEvaluation);
+      }
+      return;
+    }
+    this.pendingEvaluation = {
+      type: "setTimeout",
+      handle: setTimeout(() => {
+        try {
+          this.evaluate(Date.now());
+        } catch (e) {
+          console.error(e);
+          this.log("stopping animation");
+          this.errored = e;
+          this.thisNode = void 0;
+        }
+      }, maybeAlarm - this.time - (((_d = this.options) == null ? void 0 : _d.noAnimationFrame) ? 0 : 20))
+    };
+  }
+  scheduler() {
+    if (this.pendingAnimationFrame) {
+      const frame = requestAnimationFrame(() => {
+        if (this.pendingAnimationFrame) {
+          this.doEvaluate();
+          this.scheduler();
+        }
+      });
+      return frame;
+    }
+  }
+  doEvaluate() {
+    if (this.evaluationAlarm[0] - this.time < 20) {
       try {
         this.evaluate(Date.now());
-      } finally {
-        this.evaluatorRunning = 0;
+      } catch (e) {
+        console.error(e);
+        this.log("stopping animation");
+        this.errored = e;
+        this.thisNode = void 0;
+        this.pendingAnimationFrame = false;
+        this.pendingEvaluation = null;
       }
-    }, 0);
+    }
   }
   setupProgram(scriptsArg, path2 = "") {
+    var _a2;
     const invalidatedStreamNames = /* @__PURE__ */ new Set();
     const scripts = scriptsArg.map((s) => {
       if (typeof s === "string") {
         return s;
       }
       return s.code;
-    });
-    const blockIds = scriptsArg.map((s, i2) => {
-      if (typeof s === "string") {
-        return `${i2}`;
-      }
-      return s.blockId;
     });
     for (const [varName, stream] of this.streams) {
       if (!stream[isBehaviorKey]) {
@@ -10260,7 +10618,6 @@ class ProgramState {
     const jsNodes = /* @__PURE__ */ new Map();
     let id = 0;
     for (let scriptIndex = 0; scriptIndex < scripts.length; scriptIndex++) {
-      const blockId = blockIds[scriptIndex];
       const script = scripts[scriptIndex];
       if (!script) {
         continue;
@@ -10270,7 +10627,6 @@ class ProgramState {
         if (jsNodes.get(n2.id)) {
           this.log(`node "${n2.id}" is defined multiple times`);
         }
-        n2.blockId = blockId;
         jsNodes.set(n2.id, n2);
         id++;
       }
@@ -10289,8 +10645,13 @@ class ProgramState {
     }
     const sorted = topologicalSort(evaluated);
     const newNodes = /* @__PURE__ */ new Map();
+    this.nextDeps = /* @__PURE__ */ new Set();
     for (const newNode of evaluated) {
       newNodes.set(newNode.id, newNode);
+      const deps = newNode.inputs.filter((varName) => varName.startsWith("$")).map((varName) => varName.slice(1));
+      for (const dep of deps) {
+        this.nextDeps.add(dep);
+      }
     }
     const unsortedVarnames = difference(new Set(evaluated.map((e) => e.id)), new Set(sorted));
     for (const u2 of unsortedVarnames) {
@@ -10316,6 +10677,10 @@ class ProgramState {
         this.inputArray.delete(newNode.id);
       }
       if (invalidatedStreamNames.has(nodeId)) {
+        const oldValue = (_a2 = this.resolved.get(nodeId)) == null ? void 0 : _a2.value;
+        if (isGenerator(oldValue)) {
+          oldValue.return();
+        }
         this.resolved.delete(nodeId);
         this.scratch.delete(nodeId);
         this.inputArray.delete(nodeId);
@@ -10354,23 +10719,53 @@ class ProgramState {
         }
       }
     }
+    delete this.errored;
   }
   updateProgram(scripts, path2 = "") {
-    this.futureScripts = { scripts, path: path2 };
+    if (!this.thisNode) {
+      this.setupProgram(scripts, path2);
+      this.requestAlarm(1);
+      this.scheduleAlarm();
+    } else {
+      this.futureScripts = { scripts, path: path2 };
+    }
   }
   findDecls(code) {
     return findDecls(code);
   }
-  evaluate(now, callConclude = true) {
+  findDecl(name) {
+    const decls = this.findDecls(this.scripts.join("\n"));
+    const decl = decls.find((d2) => d2.decls.includes(name));
+    if (decl) {
+      return decl.code;
+    }
+  }
+  evaluator(now, options) {
+    var _a2;
+    if (options) {
+      this.options = options;
+    }
+    if ((_a2 = this.options) == null ? void 0 : _a2.ticker) {
+      this.tickingEvaluator();
+      return;
+    }
+    if (this.evaluationAlarm.length === 0) {
+      this.evaluationAlarm.push(-1);
+    }
+    this.evaluate(now);
+  }
+  evaluate(now) {
     this.time = now - this.startTime;
     this.updated = false;
+    this.prelude();
     let trace;
     if (this.breakpoints.size > 0) {
       trace = [];
     }
     for (let id of this.order) {
-      const node = this.nodes.get(id);
-      if (!this.ready(node)) {
+      this.thisNode = this.nodes.get(id);
+      const componentUpdate = this.componentReady(this.thisNode);
+      if (!this.ready(this.thisNode) && !componentUpdate) {
         continue;
       }
       if (trace) {
@@ -10379,17 +10774,20 @@ class ProgramState {
         }
       }
       const change = this.changeList.get(id);
-      const inputArray = node.inputs.map((inputName) => {
+      const inputArray = this.thisNode.inputs.map((inputName) => {
         var _a2;
         return (_a2 = this.resolved.get(this.baseVarName(inputName))) == null ? void 0 : _a2.value;
       });
+      if (componentUpdate) {
+        inputArray.push(this.time);
+      }
       const lastInputArray = this.inputArray.get(id);
       let outputs;
       if (change === void 0 && this.equals(inputArray, lastInputArray)) {
         outputs = this.streams.get(id);
       } else {
         if (change === void 0) {
-          outputs = node.body.apply(
+          outputs = this.thisNode.body.apply(
             this,
             [...inputArray, this]
           );
@@ -10427,23 +10825,41 @@ class ProgramState {
         continue;
       }
       if (trace) {
-        trace.push({ id, inputArray, inputs: node.inputs, value: outputs });
+        trace.push({ id, inputArray, inputs: this.thisNode.inputs, value: outputs });
         if (this.breakpoints.has(id)) {
           this.log(trace);
         }
       }
       const evStream = outputs;
-      evStream.evaluate(this, node, inputArray, lastInputArray);
+      evStream.evaluate(this, this.thisNode, inputArray, lastInputArray);
     }
-    if (callConclude) {
+    if (!this.componentParent) {
       this.conclude();
     }
     if (this.futureScripts) {
       const { scripts, path: path2 } = this.futureScripts;
       delete this.futureScripts;
       this.setupProgram(scripts, path2);
+      this.requestAlarm(1);
     }
+    this.scheduleAlarm();
+    this.thisNode = void 0;
     return this.updated;
+  }
+  prelude() {
+    let i2 = 0;
+    while (true) {
+      let alarm = this.evaluationAlarm[i2];
+      if (alarm === void 0) {
+        break;
+      }
+      if (alarm >= this.time) {
+        break;
+      }
+      i2++;
+    }
+    this.evaluationAlarm = this.evaluationAlarm.slice(i2, this.evaluationAlarm.length);
+    return i2 !== 0;
   }
   conclude() {
     for (let id of this.order) {
@@ -10469,6 +10885,28 @@ class ProgramState {
     let val = func(Events, Behaviors, this);
     val.code = code;
     return val;
+  }
+  componentReady(node) {
+    const set = this.hasComponent.get(node.id);
+    if (set) {
+      for (const key of set) {
+        const subgraph = this.programStates.get(key);
+        if (!subgraph) {
+          return false;
+        }
+        const programState = subgraph.programState;
+        if (!programState) {
+          return false;
+        }
+        if (programState.evaluationAlarm.length === 0) {
+          return false;
+        }
+        if (programState.evaluationAlarm[0] <= this.time) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
   ready(node) {
     const output = node.outputs;
@@ -10553,15 +10991,14 @@ class ProgramState {
     } else {
       this.changeList.set(receiver, value);
     }
-    if (this.noTicking) {
-      this.noTickingEvaluator();
-    }
+    this.requestAlarm(1);
+    this.scheduleAlarm();
   }
   setResolved(varName, value) {
     this.resolved.set(varName, value);
     this.updated = true;
-    if (this.noTicking) {
-      this.noTickingEvaluator();
+    if (this.nextDeps.has(varName)) {
+      this.requestAlarm(1);
     }
   }
   setResolvedForSubgraph(varName, value) {
@@ -10593,8 +11030,24 @@ class ProgramState {
       });
     });
   }
-  component(func) {
+  component(argFunc) {
+    if (typeof argFunc === "function") {
+      const maybeString = argFunc.toString();
+      const translated = maybeString.includes("Events.create(Renkon)") || maybeString.includes("Behaviors.create(Renkon)");
+      if (translated) {
+        const decl = this.findDecl(argFunc.name);
+        if (decl) {
+          argFunc = decl;
+        }
+      }
+    }
+    const func = typeof argFunc === "string" ? Function(`return ` + argFunc)() : argFunc;
+    const funcString = typeof argFunc === "string" ? argFunc : argFunc.toString();
+    let lastReturned;
     return (input, key) => {
+      if (key === void 0) {
+        console.log("the second argument key has to be specified");
+      }
       let programState;
       let returnValues = null;
       let newProgramState = false;
@@ -10602,18 +11055,31 @@ class ProgramState {
       if (!subProgramState) {
         newProgramState = true;
         programState = new ProgramState(this.time);
-        programState.lastReturned = void 0;
+        programState.componentParent = this;
       } else {
         programState = subProgramState.programState;
-        returnValues = subProgramState.returnArray;
+        returnValues = subProgramState.outputNames;
       }
-      const maybeOldFunc = subProgramState == null ? void 0 : subProgramState.func;
-      if (newProgramState || func !== maybeOldFunc) {
-        const { params, returnValues: r, output } = getFunctionBody(func.toString(), false);
-        returnValues = r;
-        const receivers = params.map((r2) => `const ${r2} = Events.receiver();`).join("\n");
+      const maybeOldFunc = subProgramState == null ? void 0 : subProgramState.funcString;
+      if (newProgramState || funcString !== maybeOldFunc) {
+        let { params, types: types2, returnValues: rs, output } = getFunctionBody(funcString, false);
+        returnValues = rs;
+        const receivers = params.map((r) => `const ${r} = ${(types2 == null ? void 0 : types2.get(r)) === "Behavior" ? "Behaviors" : "Events"}.receiver();`).join("\n");
         programState.setupProgram([receivers, output], func.name);
-        this.programStates.set(key, { programState, func, returnArray: r });
+        this.programStates.set(key, { programState, funcString, outputNames: returnValues });
+        if (this.thisNode === void 0) {
+          console.log("a component is created outside of a node definition");
+        } else {
+          let set = this.hasComponent.get(this.thisNode.id);
+          if (!set) {
+            set = /* @__PURE__ */ new Set();
+            this.hasComponent.set(this.thisNode.id, set);
+          }
+          if (set.has(key)) {
+            console.log("the same key is specified for multiple component instances");
+          }
+          set.add(key);
+        }
       }
       const trigger = (input2) => {
         for (let key2 in input2) {
@@ -10622,99 +11088,42 @@ class ProgramState {
             { value: input2[key2], time: this.time }
           );
         }
-        programState.evaluate(this.time, false);
-        const result = {};
+        programState.componentUpdated = false;
+        programState.evaluator(this.time, { once: true });
+        let result = void 0;
         const resultTest = [];
+        let resultTypeBehavior = true;
         if (returnValues) {
           if (Array.isArray(returnValues)) {
-            for (const n2 of returnValues) {
-              const v2 = programState.resolved.get(n2);
-              resultTest.push(v2 ? v2.value : void 0);
-              if (v2 && v2.value !== void 0) {
-                result[n2] = v2.value;
-              }
-            }
+            console.log("arrayform is no longer supported");
           } else {
             for (const k2 of Object.keys(returnValues)) {
               const v2 = programState.resolved.get(returnValues[k2]);
               resultTest.push(v2 ? v2.value : void 0);
+              resultTypeBehavior = resultTypeBehavior && programState.types.get(returnValues[k2]) === "Behavior";
               if (v2 && v2.value !== void 0) {
+                if (result === void 0) {
+                  result = {};
+                }
                 result[k2] = v2.value;
               }
             }
           }
+          if (programState.componentUpdated) {
+            this.requestAlarm(1);
+            this.scheduleAlarm();
+          }
         }
         programState.conclude();
+        const equals = programState.equals(lastReturned, resultTest);
+        lastReturned = resultTest;
+        if (resultTypeBehavior && equals) {
+          return void 0;
+        }
         return result;
       };
       return trigger(input);
     };
-  }
-  renkonify(func, optSystem) {
-    const programState = new ProgramState(0, optSystem);
-    const { params, returnValues, output } = getFunctionBody(func.toString(), false);
-    const self = this;
-    const receivers = params.map((r) => `const ${r} = undefined;`).join("\n");
-    programState.setupProgram([receivers, output]);
-    function generator(params2) {
-      const gen = renkonBody(params2);
-      gen.done = false;
-      return Events.create(self).next(gen);
-    }
-    async function* renkonBody(args) {
-      let lastYielded = void 0;
-      for (let key in args) {
-        programState.setResolvedForSubgraph(
-          key,
-          { value: args[key], time: self.time }
-        );
-      }
-      while (true) {
-        programState.evaluate(self.time);
-        const result = {};
-        const resultTest = [];
-        if (returnValues && Array.isArray(returnValues)) {
-          for (const n2 of returnValues) {
-            const v2 = programState.resolved.get(n2);
-            resultTest.push(v2 ? v2.value : void 0);
-            if (v2 && v2.value !== void 0) {
-              result[n2] = v2.value;
-            }
-          }
-        }
-        if (returnValues) {
-          for (const k2 of Object.keys(returnValues)) {
-            const v2 = programState.resolved.get(returnValues[k2]);
-            resultTest.push(v2 ? v2.value : void 0);
-            if (v2 && v2.value !== void 0) {
-              result[k2] = v2.value;
-            }
-          }
-        }
-        yield !self.equals(lastYielded, resultTest) ? result : void 0;
-        lastYielded = resultTest;
-      }
-    }
-    return generator;
-  }
-  evaluateSubProgram(programState, params) {
-    for (let key in params) {
-      programState.registerEvent(key, params[key]);
-    }
-    programState.evaluate(this.time);
-    if (!programState.updated) {
-      return void 0;
-    }
-    const result = {};
-    if (programState.exports) {
-      for (const n2 of programState.exports) {
-        const v2 = programState.resolved.get(n2);
-        if (v2 && v2.value !== void 0) {
-          result[n2] = v2.value;
-        }
-      }
-    }
-    return result;
   }
   spaceURL(partialURL) {
     if (/^http(s)?:\/\//.test(partialURL)) {
