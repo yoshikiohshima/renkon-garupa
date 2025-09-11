@@ -25,15 +25,15 @@
 "type":"resize",
 "width":973.9539408166121,
 "x":-1089.715906623933,
-"y":228.15210138442123}],["19",{"height":1613.8395141343128,
+"y":228.15210138442123}],["19",{"height":1645.8306174384597,
 "id":"19",
-"type":"move",
-"width":910.4905731115409,
+"type":"resize",
+"width":899.861806814844,
 "x":25.102569154123614,
-"y":373.88248710451273}],["53",{"height":285.31924216833147,
+"y":373.88248710451273}],["53",{"height":298.46675607275336,
 "id":"53",
-"type":"move",
-"width":825.2975600974639,
+"type":"resize",
+"width":819.9267779635852,
 "x":28.093796608680428,
 "y":8.532235452040368}]]}},
 "titles":{"map":{"__map":true,
@@ -52,7 +52,7 @@
 "title":"Events"}],["53",{"id":"53",
 "state":false,
 "title":"Safari"}]]}},
-"version":2,
+"version":3,
 "windowEnabled":{"map":{"__map":true,
 "values":[["1",{"enabled":true,
 "id":"1"}],["2",{"enabled":true,
@@ -202,7 +202,6 @@ Events.listener(window, "resize", resizer);
 })(renkon)
 `],
 [`3`, `const timer = Events.timer(4);
-const e1 = Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt);
 const removeTimer = ((renkon) => {
     renkon.querySelector("#time")?.remove();
 })(renkon);`],
@@ -313,6 +312,7 @@ const addCss = ((renkon, css) => {
 })(renkon, css);`],
 [`19`, `// const e1 = Behaviors.keep(Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt));
 // const e1 = Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt);
+const e1 = Events.listener(renkon.querySelector("#lane1"), "pointerdown", (evt) => evt);
 const e2 = Events.listener(renkon.querySelector("#lane2"), "pointerdown", (evt) => evt);
 const e3 = Events.listener(renkon.querySelector("#lane3"), "pointerdown", (evt) => evt);
 const e4 = Events.listener(renkon.querySelector("#lane4"), "pointerdown", (evt) => evt);
@@ -320,7 +320,7 @@ const e5 = Events.listener(renkon.querySelector("#lane5"), "pointerdown", (evt) 
 const e6 = Events.listener(renkon.querySelector("#lane6"), "pointerdown", (evt) => evt);
 const e7 = Events.listener(renkon.querySelector("#lane7"), "pointerdown", (evt) => evt);
 
-const taps = Events.some(e1, e2, e3, e4, e5, e6, e7, Behaviors.keep(0));
+const taps = Events.some(e1, e2, e3, e4, e5, e6, e7);
 const judge = ((notes, taps, _timer) => {
   const {start, timer} = notes.state;
   const elapsed = timer - start;
